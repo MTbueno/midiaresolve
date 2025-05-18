@@ -1,7 +1,7 @@
 
 "use client";
-import type React from 'react';
 import { useState, useCallback, useRef } from 'react';
+import type React from 'react';
 import { UploadCloud } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -42,7 +42,13 @@ export function FileUploadArea({ onFileSelect, acceptedFileTypes = ['image/*', '
   const handleDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    setIsDragging(false);
+    // Check if the mouse is leaving to outside the component or one of its children.
+    // relatedTarget is the element the mouse is moving to.
+    // If relatedTarget is null (mouse left the window) or not part of currentTarget (the dropzone div),
+    // then we are truly leaving the dropzone.
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+        setIsDragging(false);
+    }
   }, []);
 
   const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
@@ -73,14 +79,14 @@ export function FileUploadArea({ onFileSelect, acceptedFileTypes = ['image/*', '
       }
     }
     // Reset the input value to allow selecting the same file again
-    if (e.target) {
-      e.target.value = ''; // or e.target.value = null;
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
     }
   }, [onFileSelect, handleFileValidation]);
 
   const handleDivClick = useCallback(() => {
     fileInputRef.current?.click();
-  }, []); // No dependencies as fileInputRef is stable
+  }, []); 
 
   return (
     <div
@@ -96,17 +102,17 @@ export function FileUploadArea({ onFileSelect, acceptedFileTypes = ['image/*', '
       role="button"
       tabIndex={0}
       aria-label="File upload area"
-      onKeyDown={(e) => { // Allow keyboard activation
+      onKeyDown={(e) => { 
         if (e.key === 'Enter' || e.key === ' ') {
           handleDivClick();
         }
       }}
     >
-      <UploadCloud className={cn("w-12 h-12 mb-3", isDragging ? "text-primary" : "text-muted-foreground")} />
-      <p className={cn("mb-1 text-sm font-semibold", isDragging ? "text-primary" : "text-foreground")}>
+      <UploadCloud className={cn("w-12 h-12 mb-3 pointer-events-none", isDragging ? "text-primary" : "text-muted-foreground")} />
+      <p className={cn("mb-1 text-sm font-semibold pointer-events-none", isDragging ? "text-primary" : "text-foreground")}>
         Drag & drop files here
       </p>
-      <p className="text-xs text-muted-foreground">or click to select files</p>
+      <p className="text-xs text-muted-foreground pointer-events-none">or click to select files</p>
       <input
         ref={fileInputRef}
         id="fileInput"
@@ -114,9 +120,9 @@ export function FileUploadArea({ onFileSelect, acceptedFileTypes = ['image/*', '
         className="hidden"
         onChange={handleFileChange}
         accept={acceptedFileTypes.join(',')}
-        aria-hidden="true" // Input is triggered by the div
+        aria-hidden="true" 
       />
-      <p className="mt-2 text-xs text-muted-foreground">Supports: Images & Videos</p>
+      <p className="mt-2 text-xs text-muted-foreground pointer-events-none">Supports: Images & Videos</p>
     </div>
   );
 }
