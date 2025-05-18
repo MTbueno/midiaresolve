@@ -248,7 +248,8 @@ export default function MidiaResolvePage() {
         finalNewSize = newFileBlob.size;
         
         if (newFileBlob.type !== currentFileType) {
-            const baseName = file.name.substring(0, file.name.lastIndexOf('.') > 0 ? file.name.lastIndexOf('.') : file.name.length);
+            const dotIndex = file.name.lastIndexOf('.');
+            const baseName = dotIndex > -1 ? file.name.substring(0, dotIndex) : file.name;
             const newExtension = newFileBlob.type.split('/')[1];
             processedFileName = `compressed_${baseName}.${newExtension || 'bin'}`;
         }
@@ -269,41 +270,49 @@ export default function MidiaResolvePage() {
       if (targetResolution !== 'original' && videoInfo) {
           const resolutionMap: Record<VideoResolution, ResolutionOption | undefined> = {
             original: undefined,
-            hd: { value: 'hd', label: 'HD', width: 1280, height: 720 },
-            fullhd: { value: 'fullhd', label: 'FullHD', width: 1920, height: 1080 },
-            '2k': { value: '2k', label: '2K QHD', width: 2560, height: 1440 },
-            '4k': { value: '4k', label: '4K UHD', width: 3840, height: 2160 },
+            '240p': { value: '240p', label: 'Low 240p', width: 426, height: 240 },
+            '360p': { value: '360p', label: 'SD 360p', width: 640, height: 360 },
+            '480p': { value: '480p', label: 'SD 480p', width: 854, height: 480 },
+            hd: { value: 'hd', label: 'HD 720p', width: 1280, height: 720 },
+            fullhd: { value: 'fullhd', label: 'FullHD 1080p', width: 1920, height: 1080 },
+            '2k': { value: '2k', label: '2K QHD 1440p', width: 2560, height: 1440 },
+            '4k': { value: '4k', label: '4K UHD 2160p', width: 3840, height: 2160 },
           };
           const selectedOpt = resolutionMap[targetResolution];
           if (selectedOpt && selectedOpt.width && selectedOpt.height) {
-            targetResLabel = selectedOpt.label.split(' ')[0].toLowerCase(); // e.g. "hd"
-            // If target resolution is smaller, apply more reduction
+            targetResLabel = selectedOpt.value; // e.g. "hd", "240p"
             const originalPixelCount = videoInfo.width * videoInfo.height;
             const targetPixelCount = selectedOpt.width * selectedOpt.height;
             if (targetPixelCount < originalPixelCount) {
-                reductionFactor *= (targetPixelCount / originalPixelCount) * 0.8 + 0.2; // Make reduction more pronounced
+                reductionFactor *= (targetPixelCount / originalPixelCount) * 0.8 + 0.2; 
+            } else if (targetPixelCount > originalPixelCount) {
+                // If somehow upscaling was selected (should be prevented by UI), slightly increase factor
+                reductionFactor *= (targetPixelCount / originalPixelCount) * 0.2 + 0.8;
             }
           }
       }
       
       finalNewSize = Math.max(1024, Math.floor(file.size * reductionFactor));
       
-      const baseName = file.name.substring(0, file.name.lastIndexOf('.') > -1 ? file.name.lastIndexOf('.') : file.name.length);
-      const extension = file.name.substring(file.name.lastIndexOf('.'));
+      const dotIndex = file.name.lastIndexOf('.');
+      const baseName = dotIndex > -1 ? file.name.substring(0, dotIndex) : file.name;
+      const extension = dotIndex > -1 ? file.name.substring(dotIndex) : ''; // Corrected extension extraction
+      
       processedFileName = `compressed_${baseName}${targetResLabel !== 'original' ? '_' + targetResLabel : ''}${extension}`;
       
       toast({ 
         title: "Video File Processing", 
-        description: `Video 'conversion' to ${targetResLabel === 'original' ? 'original resolution' : targetResLabel.toUpperCase()} is simulated. The downloaded file contains the original video content but is renamed. Actual video transcoding is a complex process.`, 
-        variant: "default" 
+        description: `Video 'conversion' to ${targetResLabel === 'original' ? 'original resolution' : targetResLabel.toUpperCase()} is simulated. The downloaded file contains the original video content but is renamed to "${processedFileName}". Actual video transcoding is a complex process.`, 
+        variant: "default",
+        duration: 8000, // Make toast last longer
       });
-      newFileBlob = file; // Download original blob
+      newFileBlob = file; // Download original blob content
     } else {
        let reductionFactor = 0.8; 
       if (compressionLevel === 'low') reductionFactor = 0.9;
       if (compressionLevel === 'high') reductionFactor = 0.6;
       finalNewSize = Math.max(1024, Math.floor(file.size * reductionFactor));
-      toast({ title: "File Processing", description: "Compression for this file type is simulated. Download will be the original file.", variant: "default" });
+      toast({ title: "File Processing", description: "Compression for this file type is simulated. Download will be the original file, potentially renamed.", variant: "default" });
       newFileBlob = file; // Download original blob
     }
 
@@ -313,10 +322,10 @@ export default function MidiaResolvePage() {
       url: objectURL,
       originalSize: file.size,
       newSize: finalNewSize,
-      type: newFileBlob.type === file.type ? file.type : newFileBlob.type, // Ensure correct type if changed
+      type: newFileBlob.type, 
     });
     setIsProcessing(false);
-    toast({ title: "Processing Complete!", description: `${processedFileName} is ready.` });
+    toast({ title: "Processing Complete!", description: `${processedFileName} is ready for download.` });
   };
 
   const handleReset = () => {
@@ -396,5 +405,3 @@ export default function MidiaResolvePage() {
     </div>
   );
 }
-
-    
