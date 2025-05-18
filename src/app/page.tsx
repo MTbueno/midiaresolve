@@ -8,30 +8,39 @@ import { FilePreview } from '@/components/FilePreview';
 import { ProcessedFileDisplay, type ProcessedFile } from '@/components/ProcessedFileDisplay';
 import { LoadingSpinner } from '@/components/LoadingSpinner';
 import { ImageAdvancedOptions } from '@/components/ImageAdvancedOptions';
+import { VideoAdvancedOptions, type VideoResolution } from '@/components/VideoAdvancedOptions'; // Added
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { RefreshCcw } from 'lucide-react';
+import { getResolutionLabel, type ResolutionOption } from '@/lib/videoUtils'; // Added
 
 export interface OriginalDimensions {
   width: number;
   height: number;
 }
 
+export interface VideoInfo extends OriginalDimensions {
+  label: string;
+}
+
 export default function MidiaResolvePage() {
   const [file, setFile] = useState<File | null>(null);
   const [originalDimensions, setOriginalDimensions] = useState<OriginalDimensions | null>(null);
+  const [videoInfo, setVideoInfo] = useState<VideoInfo | null>(null); // Added for video
   const [compressionLevel, setCompressionLevel] = useState<CompressionLevel>('medium');
   const [processedFile, setProcessedFile] = useState<ProcessedFile | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const { toast } = useToast();
 
-  // Advanced options state
+  // Image Advanced options state
   const [scalePercentage, setScalePercentage] = useState<number>(100);
   const [outputWidth, setOutputWidth] = useState<string>('');
   const [outputHeight, setOutputHeight] = useState<string>('');
   const [isCropping, setIsCropping] = useState<boolean>(false);
 
+  // Video Advanced options state
+  const [targetResolution, setTargetResolution] = useState<VideoResolution>('original'); // Added
 
   // Clean up object URLs to prevent memory leaks
   useEffect(() => {
@@ -39,17 +48,26 @@ export default function MidiaResolvePage() {
       if (processedFile?.url) {
         URL.revokeObjectURL(processedFile.url);
       }
+      if (videoInfo && file?.type.startsWith('video/')) { // Clean up video src if any
+        // The video src URL created in handleFileSelect might need cleanup if component unmounts before onloadedmetadata
+      }
     };
-  }, [processedFile]);
+  }, [processedFile, videoInfo, file]);
 
   const handleFileSelect = useCallback((selectedFile: File) => {
     setFile(selectedFile);
     setProcessedFile(null); // Clear previous processed file
-    setScalePercentage(100); // Reset advanced options
+    
+    // Reset image options
+    setScalePercentage(100);
     setOutputWidth('');
     setOutputHeight('');
     setIsCropping(false);
     setOriginalDimensions(null);
+    
+    // Reset video options
+    setVideoInfo(null);
+    setTargetResolution('original');
 
     if (selectedFile.type.startsWith('image/')) {
       const reader = new FileReader();
@@ -63,10 +81,29 @@ export default function MidiaResolvePage() {
         }
       };
       reader.readAsDataURL(selectedFile);
-    }
-  }, []);
+    } else if (selectedFile.type.startsWith('video/')) {
+      const videoElement = document.createElement('video');
+      videoElement.preload = 'metadata';
+      const videoSrc = URL.createObjectURL(selectedFile);
+      videoElement.src = videoSrc;
 
-  // Effect to determine if cropping will occur based on manual inputs
+      videoElement.onloadedmetadata = () => {
+        setVideoInfo({
+          width: videoElement.videoWidth,
+          height: videoElement.videoHeight,
+          label: getResolutionLabel(videoElement.videoWidth, videoElement.videoHeight),
+        });
+        URL.revokeObjectURL(videoSrc); // Clean up object URL once metadata is loaded
+      };
+      videoElement.onerror = () => {
+        toast({ title: "Error", description: "Could not read video metadata.", variant: "destructive" });
+        setVideoInfo(null);
+        URL.revokeObjectURL(videoSrc); // Clean up also on error
+      };
+    }
+  }, [toast]);
+
+  // Effect to determine if image cropping will occur
   useEffect(() => {
     if (file?.type.startsWith('image/') && originalDimensions && outputWidth && outputHeight) {
       const w = parseInt(outputWidth);
@@ -79,7 +116,7 @@ export default function MidiaResolvePage() {
       const originalAspectRatio = originalDimensions.width / originalDimensions.height;
       const targetAspectRatio = w / h;
 
-      if (Math.abs(originalAspectRatio - targetAspectRatio) > 0.001) { // Using a small epsilon
+      if (Math.abs(originalAspectRatio - targetAspectRatio) > 0.001) {
         setIsCropping(true);
       } else {
         setIsCropping(false);
@@ -94,10 +131,12 @@ export default function MidiaResolvePage() {
     setFile(null);
     setProcessedFile(null);
     setOriginalDimensions(null);
+    setVideoInfo(null);
     setScalePercentage(100);
     setOutputWidth('');
     setOutputHeight('');
     setIsCropping(false);
+    setTargetResolution('original');
   }, []);
 
   const handleCompress = async () => {
@@ -109,7 +148,9 @@ export default function MidiaResolvePage() {
     if (processedFile?.url) URL.revokeObjectURL(processedFile.url);
     setProcessedFile(null);
 
-    await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 1000)); // Simulate base delay
+    // Simulate base delay
+    const processingMessage = file.type.startsWith('video/') ? 'Simulating video processing...' : 'Compressing...';
+    await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 1000)); 
 
     let newFileBlob: Blob = file;
     let finalNewSize = file.size;
@@ -149,7 +190,6 @@ export default function MidiaResolvePage() {
               targetHeight = Math.round(originalDimensions.height * (scalePercentage / 100));
             }
             
-            // Ensure minimum dimensions
             targetWidth = Math.max(1, targetWidth);
             targetHeight = Math.max(1, targetHeight);
 
@@ -157,21 +197,19 @@ export default function MidiaResolvePage() {
             canvas.height = targetHeight;
 
             if (performCrop) {
-              // Crop from center
               const sourceAspectRatio = originalDimensions.width / originalDimensions.height;
               const targetCanvasAspectRatio = targetWidth / targetHeight;
               let sx = 0, sy = 0, sWidth = originalDimensions.width, sHeight = originalDimensions.height;
 
-              if (sourceAspectRatio > targetCanvasAspectRatio) { // Original is wider than target canvas
+              if (sourceAspectRatio > targetCanvasAspectRatio) {
                 sWidth = originalDimensions.height * targetCanvasAspectRatio;
                 sx = (originalDimensions.width - sWidth) / 2;
-              } else if (sourceAspectRatio < targetCanvasAspectRatio) { // Original is taller than target canvas
+              } else if (sourceAspectRatio < targetCanvasAspectRatio) {
                 sHeight = originalDimensions.width / targetCanvasAspectRatio;
                 sy = (originalDimensions.height - sHeight) / 2;
               }
               ctx.drawImage(img, sx, sy, sWidth, sHeight, 0, 0, targetWidth, targetHeight);
             } else {
-              // Simple resize
               ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
             }
 
@@ -181,10 +219,8 @@ export default function MidiaResolvePage() {
             
             let targetMimeType = 'image/jpeg';
              if (currentFileType === 'image/png' && compressionLevel === 'low' && !performCrop && scalePercentage === 100 && !outputWidth && !outputHeight) {
-              // Try to preserve PNG if low compression and no resize/crop
               targetMimeType = 'image/png';
             }
-
 
             canvas.toBlob(
               (blob) => {
@@ -220,24 +256,55 @@ export default function MidiaResolvePage() {
       } catch (error: any) {
         console.error("Image processing error:", error);
         toast({ title: "Image Processing Error", description: error.message || "Could not process the image. Using original.", variant: "destructive" });
-        newFileBlob = file; // Fallback
+        newFileBlob = file; 
         finalNewSize = file.size;
         processedFileName = `compressed_${file.name}`;
       }
-    } else if (currentFileType.startsWith('video/')) {
-      // Simulate video compression (size reduction is just an estimate)
+    } else if (currentFileType.startsWith('video/') && videoInfo) {
       let reductionFactor = 0.5; // Medium default
       if (compressionLevel === 'low') reductionFactor = 0.75;
       if (compressionLevel === 'high') reductionFactor = 0.25;
+
+      let targetResLabel = 'original';
+      if (targetResolution !== 'original' && videoInfo) {
+          const resolutionMap: Record<VideoResolution, ResolutionOption | undefined> = {
+            original: undefined,
+            hd: { value: 'hd', label: 'HD', width: 1280, height: 720 },
+            fullhd: { value: 'fullhd', label: 'FullHD', width: 1920, height: 1080 },
+            '2k': { value: '2k', label: '2K QHD', width: 2560, height: 1440 },
+            '4k': { value: '4k', label: '4K UHD', width: 3840, height: 2160 },
+          };
+          const selectedOpt = resolutionMap[targetResolution];
+          if (selectedOpt && selectedOpt.width && selectedOpt.height) {
+            targetResLabel = selectedOpt.label.split(' ')[0].toLowerCase(); // e.g. "hd"
+            // If target resolution is smaller, apply more reduction
+            const originalPixelCount = videoInfo.width * videoInfo.height;
+            const targetPixelCount = selectedOpt.width * selectedOpt.height;
+            if (targetPixelCount < originalPixelCount) {
+                reductionFactor *= (targetPixelCount / originalPixelCount) * 0.8 + 0.2; // Make reduction more pronounced
+            }
+          }
+      }
+      
       finalNewSize = Math.max(1024, Math.floor(file.size * reductionFactor));
-      toast({ title: "Video File Processing", description: "Video compression is simulated. The downloaded file will be the original.", variant: "default" });
+      
+      const baseName = file.name.substring(0, file.name.lastIndexOf('.') > -1 ? file.name.lastIndexOf('.') : file.name.length);
+      const extension = file.name.substring(file.name.lastIndexOf('.'));
+      processedFileName = `compressed_${baseName}${targetResLabel !== 'original' ? '_' + targetResLabel : ''}${extension}`;
+      
+      toast({ 
+        title: "Video File Processing", 
+        description: `Video 'conversion' to ${targetResLabel === 'original' ? 'original resolution' : targetResLabel.toUpperCase()} is simulated. The downloaded file contains the original video content but is renamed. Actual video transcoding is a complex process.`, 
+        variant: "default" 
+      });
+      newFileBlob = file; // Download original blob
     } else {
-      // Simulate other file types compression
-       let reductionFactor = 0.8; // Default less aggressive for other types
+       let reductionFactor = 0.8; 
       if (compressionLevel === 'low') reductionFactor = 0.9;
       if (compressionLevel === 'high') reductionFactor = 0.6;
       finalNewSize = Math.max(1024, Math.floor(file.size * reductionFactor));
       toast({ title: "File Processing", description: "Compression for this file type is simulated. Download will be the original file.", variant: "default" });
+      newFileBlob = file; // Download original blob
     }
 
     const objectURL = URL.createObjectURL(newFileBlob);
@@ -246,10 +313,10 @@ export default function MidiaResolvePage() {
       url: objectURL,
       originalSize: file.size,
       newSize: finalNewSize,
-      type: newFileBlob.type
+      type: newFileBlob.type === file.type ? file.type : newFileBlob.type, // Ensure correct type if changed
     });
     setIsProcessing(false);
-    toast({ title: "Compression Complete!", description: `${processedFileName} has been processed.` });
+    toast({ title: "Processing Complete!", description: `${processedFileName} is ready.` });
   };
 
   const handleReset = () => {
@@ -258,10 +325,12 @@ export default function MidiaResolvePage() {
     setIsProcessing(false);
     setCompressionLevel('medium');
     setOriginalDimensions(null);
+    setVideoInfo(null);
     setScalePercentage(100);
     setOutputWidth('');
     setOutputHeight('');
     setIsCropping(false);
+    setTargetResolution('original');
   };
 
   return (
@@ -280,8 +349,9 @@ export default function MidiaResolvePage() {
 
             {file && !processedFile && (
               <>
-                <FilePreview file={file} onClear={clearFile} />
+                <FilePreview file={file} onClear={clearFile} videoInfo={videoInfo} />
                 <CompressionOptions value={compressionLevel} onChange={setCompressionLevel} />
+                
                 {file.type.startsWith('image/') && originalDimensions && (
                   <ImageAdvancedOptions
                     scalePercentage={scalePercentage}
@@ -294,11 +364,20 @@ export default function MidiaResolvePage() {
                     originalDimensions={originalDimensions}
                   />
                 )}
+
+                {file.type.startsWith('video/') && videoInfo && (
+                  <VideoAdvancedOptions
+                    videoInfo={videoInfo}
+                    targetResolution={targetResolution}
+                    onTargetResolutionChange={setTargetResolution}
+                  />
+                )}
+
                 <Button onClick={handleCompress} disabled={isProcessing} className="w-full">
                   {isProcessing ? (
                     <LoadingSpinner className="mr-2" size={16} />
                   ) : null}
-                  {isProcessing ? 'Compressing...' : 'Compress File'}
+                  {isProcessing ? (file.type.startsWith('video/') ? 'Simulating video processing...' : 'Compressing...') : 'Process File'}
                 </Button>
               </>
             )}
@@ -317,3 +396,5 @@ export default function MidiaResolvePage() {
     </div>
   );
 }
+
+    

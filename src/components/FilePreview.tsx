@@ -1,14 +1,18 @@
+
 "use client";
+import type { VideoInfo } from '@/app/page'; // Added
 import { FileImage, FileVideo, File as FileIcon, XCircle } from 'lucide-react';
 import { formatFileSize } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge'; // Added
 
 interface FilePreviewProps {
   file: File;
   onClear?: () => void;
+  videoInfo?: VideoInfo | null; // Added
 }
 
-export function FilePreview({ file, onClear }: FilePreviewProps) {
+export function FilePreview({ file, onClear, videoInfo }: FilePreviewProps) {
   const getFileIcon = () => {
     if (file.type.startsWith('image/')) return <FileImage className="w-10 h-10 text-primary" />;
     if (file.type.startsWith('video/')) return <FileVideo className="w-10 h-10 text-primary" />;
@@ -35,8 +39,15 @@ export function FilePreview({ file, onClear }: FilePreviewProps) {
           <p className="text-xs text-muted-foreground">
             {file.type} - {formatFileSize(file.size)}
           </p>
+          {videoInfo && file.type.startsWith('video/') && (
+            <Badge variant="outline" className="mt-1 text-xs">
+              Original: {videoInfo.label} ({videoInfo.width}x{videoInfo.height}px)
+            </Badge>
+          )}
         </div>
       </div>
     </div>
   );
 }
+
+    
