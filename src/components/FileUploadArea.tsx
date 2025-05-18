@@ -1,6 +1,7 @@
+
 "use client";
 import type React from 'react';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react'; // Added useRef
 import { UploadCloud } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -13,6 +14,7 @@ interface FileUploadAreaProps {
 export function FileUploadArea({ onFileSelect, acceptedFileTypes = ['image/*', 'video/*'] }: FileUploadAreaProps) {
   const [isDragging, setIsDragging] = useState(false);
   const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null); // Added ref for file input
 
   const handleFileValidation = (file: File): boolean => {
     if (!acceptedFileTypes.some(type => {
@@ -46,7 +48,7 @@ export function FileUploadArea({ onFileSelect, acceptedFileTypes = ['image/*', '
   const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!isDragging) setIsDragging(true); // Ensure isDragging is true
+    if (!isDragging) setIsDragging(true);
     e.dataTransfer.dropEffect = 'copy';
   }, [isDragging]);
 
@@ -72,6 +74,10 @@ export function FileUploadArea({ onFileSelect, acceptedFileTypes = ['image/*', '
     }
   };
 
+  const handleDivClick = () => {
+    fileInputRef.current?.click(); // Use ref to click the input
+  };
+
   return (
     <div
       className={cn(
@@ -82,7 +88,7 @@ export function FileUploadArea({ onFileSelect, acceptedFileTypes = ['image/*', '
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
-      onClick={() => document.getElementById('fileInput')?.click()}
+      onClick={handleDivClick} // Updated onClick handler
       role="button"
       tabIndex={0}
       aria-label="File upload area"
@@ -93,7 +99,8 @@ export function FileUploadArea({ onFileSelect, acceptedFileTypes = ['image/*', '
       </p>
       <p className="text-xs text-muted-foreground">or click to select files</p>
       <input
-        id="fileInput"
+        ref={fileInputRef} // Attach the ref
+        id="fileInput" // ID can remain or be removed if not used elsewhere
         type="file"
         className="hidden"
         onChange={handleFileChange}
