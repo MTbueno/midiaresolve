@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { Crop } from 'lucide-react';
+import { useMemo } from 'react';
 
 interface ImageAdvancedOptionsProps {
   scalePercentage: number;
@@ -27,11 +28,23 @@ export function ImageAdvancedOptions({
   isCropping,
   originalDimensions,
 }: ImageAdvancedOptionsProps) {
+  const scaledDimensions = useMemo(() => {
+    if (!originalDimensions) return null;
+    const width = Math.round(originalDimensions.width * (scalePercentage / 100));
+    const height = Math.round(originalDimensions.height * (scalePercentage / 100));
+    return { width, height };
+  }, [originalDimensions, scalePercentage]);
+
   return (
     <div className="space-y-6 py-4 border-t border-border mt-4 pt-6">
       <div className="space-y-2">
         <Label htmlFor="scale-slider" className="text-base font-semibold">
           Scale Proportionally: {scalePercentage}%
+          {scaledDimensions && !outputWidth && !outputHeight && (
+            <span className="text-sm text-muted-foreground ml-2">
+              ({scaledDimensions.width}x{scaledDimensions.height} px)
+            </span>
+          )}
         </Label>
         <Slider
           id="scale-slider"
