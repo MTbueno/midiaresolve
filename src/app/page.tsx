@@ -1,3 +1,4 @@
+
 "use client";
 import { useState, useEffect, useCallback } from 'react';
 import { AppHeader } from '@/components/AppHeader';
@@ -43,31 +44,108 @@ export default function MidiaResolvePage() {
       return;
     }
     setIsProcessing(true);
-    if(processedFile?.url) URL.revokeObjectURL(processedFile.url); // Revoke old URL if exists
+    if (processedFile?.url) URL.revokeObjectURL(processedFile.url); // Revoke old URL if exists
     setProcessedFile(null);
 
     // Simulate processing delay
     await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 1000));
 
-    let reductionFactor = 0.5; // Medium
-    if (compressionLevel === 'low') reductionFactor = 0.75; // Smaller reduction
-    if (compressionLevel === 'high') reductionFactor = 0.25; // Larger reduction
+    let reductionFactor = 0.5; // Medium default
+    if (compressionLevel === 'low') reductionFactor = 0.75; // Smaller reduction for low
+    if (compressionLevel === 'high') reductionFactor = 0.25; // Larger reduction for high
 
-    const newSize = Math.max(1024, Math.floor(file.size * reductionFactor));
+    let newFileBlob: Blob = file; // Default to original file blob
+    let finalNewSize = Math.max(1024, Math.floor(file.size * reductionFactor)); // Default simulated new size
+    let processedFileName = `compressed_${file.name}`;
 
-    // Create a blob URL for the "processed" file. In a real app, this would be the compressed blob.
-    // For simulation, we use the original file's blob.
-    const objectURL = URL.createObjectURL(file);
+
+    if (file.type.startsWith('image/')) {
+      try {
+        newFileBlob = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            if (!event.target?.result) {
+                reject(new Error("Failed to read file"));
+                return;
+            }
+            const img = new Image();
+            img.onload = () => {
+              const canvas = document.createElement('canvas');
+              const ctx = canvas.getContext('2d');
+              if (!ctx) {
+                reject(new Error('Failed to get canvas context'));
+                return;
+              }
+
+              canvas.width = img.width;
+              canvas.height = img.height;
+              ctx.drawImage(img, 0, 0);
+
+              let targetMimeType = 'image/jpeg'; // Default to JPEG for compression
+              let quality = 0.7; // Corresponds to medium compression quality
+
+              if (compressionLevel === 'low') quality = 0.9;
+              if (compressionLevel === 'high') quality = 0.5;
+
+              // If original is PNG and compression is 'low', keep as PNG (less lossy)
+              // Otherwise, convert to JPEG for better size reduction via quality setting.
+              if (file.type === 'image/png' && compressionLevel === 'low') {
+                targetMimeType = 'image/png';
+              }
+              
+              canvas.toBlob(
+                (blob) => {
+                  if (blob) {
+                    resolve(blob);
+                  } else {
+                    reject(new Error('Canvas toBlob conversion failed'));
+                  }
+                },
+                targetMimeType,
+                targetMimeType === 'image/jpeg' ? quality : undefined // Quality parameter only applies to image/jpeg or image/webp
+              );
+            };
+            img.onerror = (e) => reject(new Error(`Image loading failed: ${e instanceof Event ? 'network error' : e.toString()}`));
+            img.src = event.target.result as string;
+          };
+          reader.onerror = (e) => reject(new Error(`FileReader failed: ${e instanceof ProgressEvent ? 'read error' : e.toString()}`));
+          reader.readAsDataURL(file);
+        });
+        finalNewSize = newFileBlob.size; // Use the actual size of the new blob
+
+        // Adjust filename if extension changed
+        if (newFileBlob.type !== file.type) {
+            const baseName = file.name.substring(0, file.name.lastIndexOf('.') > 0 ? file.name.lastIndexOf('.') : file.name.length);
+            const newExtension = newFileBlob.type.split('/')[1];
+            processedFileName = `compressed_${baseName}.${newExtension}`;
+        }
+
+      } catch (error: any) {
+        console.error("Image processing error:", error);
+        toast({ title: "Image Processing Error", description: error.message || "Could not process the image. Using original.", variant: "destructive" });
+        newFileBlob = file; // Fallback to original file blob
+        finalNewSize = Math.max(1024, Math.floor(file.size * reductionFactor)); // Fallback to simulated size
+        processedFileName = `compressed_${file.name}`; // Fallback to original name
+      }
+    } else if (file.type.startsWith('video/')) {
+      toast({ title: "Video File Processing", description: "Video compression is simulated. The downloaded file will be the original.", variant: "default" });
+      // newFileBlob is already 'file', finalNewSize is the simulated one
+    } else {
+      toast({ title: "File Processing", description: "Compression for this file type is simulated. Download will be the original file.", variant: "default" });
+      // newFileBlob is already 'file', finalNewSize is the simulated one
+    }
+
+    const objectURL = URL.createObjectURL(newFileBlob);
 
     setProcessedFile({
-      name: `compressed_${file.name}`,
+      name: processedFileName,
       url: objectURL,
       originalSize: file.size,
-      newSize: newSize,
-      type: file.type
+      newSize: finalNewSize,
+      type: newFileBlob.type // Use the type of the (potentially) new blob
     });
     setIsProcessing(false);
-    toast({ title: "Compression Complete!", description: `${file.name} has been processed.` });
+    toast({ title: "Compression Complete!", description: `${processedFileName} has been processed.` });
   };
 
   const handleReset = () => {
