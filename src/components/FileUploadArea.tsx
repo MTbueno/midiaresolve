@@ -8,10 +8,10 @@ import { cn } from '@/lib/utils';
 
 interface FileUploadAreaProps {
   onFileSelect: (file: File) => void;
-  acceptedFileTypes?: string[]; // e.g., ['image/*', 'video/*']
+  acceptedFileTypes?: string[]; // e.g., ['image/*']
 }
 
-export function FileUploadArea({ onFileSelect, acceptedFileTypes = ['image/*', 'video/*'] }: FileUploadAreaProps) {
+export function FileUploadArea({ onFileSelect, acceptedFileTypes = ['image/*'] }: FileUploadAreaProps) {
   const [isDragging, setIsDragging] = useState(false);
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -25,7 +25,7 @@ export function FileUploadArea({ onFileSelect, acceptedFileTypes = ['image/*', '
     })) {
       toast({
         title: "Unsupported File Type",
-        description: `Please upload a file of type: ${acceptedFileTypes.join(', ')}.`,
+        description: `Please upload an image file. Supported types: ${acceptedFileTypes.join(', ')}.`,
         variant: "destructive",
       });
       return false;
@@ -42,10 +42,6 @@ export function FileUploadArea({ onFileSelect, acceptedFileTypes = ['image/*', '
   const handleDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    // Check if the mouse is leaving to outside the component or one of its children.
-    // relatedTarget is the element the mouse is moving to.
-    // If relatedTarget is null (mouse left the window) or not part of currentTarget (the dropzone div),
-    // then we are truly leaving the dropzone.
     if (!e.currentTarget.contains(e.relatedTarget as Node)) {
         setIsDragging(false);
     }
@@ -78,7 +74,6 @@ export function FileUploadArea({ onFileSelect, acceptedFileTypes = ['image/*', '
         onFileSelect(file);
       }
     }
-    // Reset the input value to allow selecting the same file again
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -110,9 +105,9 @@ export function FileUploadArea({ onFileSelect, acceptedFileTypes = ['image/*', '
     >
       <UploadCloud className={cn("w-12 h-12 mb-3 pointer-events-none", isDragging ? "text-primary" : "text-muted-foreground")} />
       <p className={cn("mb-1 text-sm font-semibold pointer-events-none", isDragging ? "text-primary" : "text-foreground")}>
-        Drag & drop files here
+        Drag & drop image here
       </p>
-      <p className="text-xs text-muted-foreground pointer-events-none">or click to select files</p>
+      <p className="text-xs text-muted-foreground pointer-events-none">or click to select an image</p>
       <input
         ref={fileInputRef}
         id="fileInput"
@@ -122,7 +117,7 @@ export function FileUploadArea({ onFileSelect, acceptedFileTypes = ['image/*', '
         accept={acceptedFileTypes.join(',')}
         aria-hidden="true" 
       />
-      <p className="mt-2 text-xs text-muted-foreground pointer-events-none">Supports: Images & Videos</p>
+      <p className="mt-2 text-xs text-muted-foreground pointer-events-none">Supports: Images (JPG, PNG, WEBP, etc.)</p>
     </div>
   );
 }
