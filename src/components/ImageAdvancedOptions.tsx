@@ -4,8 +4,9 @@ import type { OriginalDimensions } from '@/app/page';
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
-import { Crop } from 'lucide-react';
+import { Crop, Info } from 'lucide-react';
 import { useMemo } from 'react';
+import { Badge } from '@/components/ui/badge';
 
 interface ImageAdvancedOptionsProps {
   scalePercentage: number;
@@ -15,7 +16,8 @@ interface ImageAdvancedOptionsProps {
   outputHeight: string;
   onOutputHeightChange: (value: string) => void;
   isCropping: boolean;
-  originalDimensions: OriginalDimensions;
+  originalDimensions: OriginalDimensions; // Dimensions of the first image for UI reference
+  isBatch: boolean; // True if multiple files are selected
 }
 
 export function ImageAdvancedOptions({
@@ -27,6 +29,7 @@ export function ImageAdvancedOptions({
   onOutputHeightChange,
   isCropping,
   originalDimensions,
+  isBatch,
 }: ImageAdvancedOptionsProps) {
   const scaledDimensions = useMemo(() => {
     if (!originalDimensions) return null;
@@ -37,6 +40,14 @@ export function ImageAdvancedOptions({
 
   return (
     <div className="space-y-6 py-4 border-t border-border mt-4 pt-6">
+      {isBatch && (
+        <div className="flex items-center text-xs text-muted-foreground p-2 rounded-md bg-muted/50 border border-border/30">
+          <Info className="w-4 h-4 mr-2 shrink-0 text-primary" />
+          <span>
+            These settings will apply to all images in the batch. Original dimensions shown are from the first image.
+          </span>
+        </div>
+      )}
       <div className="space-y-2">
         <Label htmlFor="scale-slider" className="text-base font-semibold">
           Scale Proportionally: {scalePercentage}%
@@ -53,7 +64,7 @@ export function ImageAdvancedOptions({
           step={1}
           value={[scalePercentage]}
           onValueChange={(value) => onScalePercentageChange(value[0])}
-          disabled={!!(outputWidth || outputHeight)} // Disable if manual dimensions are set
+          disabled={!!(outputWidth || outputHeight)} 
         />
          {!!(outputWidth || outputHeight) && (
           <p className="text-xs text-muted-foreground">
@@ -93,8 +104,8 @@ export function ImageAdvancedOptions({
         <div className="flex items-center text-xs text-amber-600 dark:text-amber-500 p-2 rounded-md bg-amber-500/10 border border-amber-500/30">
           <Crop className="w-4 h-4 mr-2 shrink-0" />
           <span>
-            Aspect ratio changed. Image will be cropped from the center to fit new dimensions. 
-            Original: {originalDimensions.width}x{originalDimensions.height}px.
+            Aspect ratio changed. Image(s) will be cropped from the center to fit new dimensions. 
+            Original (1st image): {originalDimensions.width}x{originalDimensions.height}px.
           </span>
         </div>
       )}
