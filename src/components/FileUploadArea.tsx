@@ -1,7 +1,7 @@
 
 "use client";
 import type React from 'react';
-import { useState, useCallback, useRef } from 'react'; // Added useRef
+import { useState, useCallback, useRef } from 'react';
 import { UploadCloud } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -14,9 +14,9 @@ interface FileUploadAreaProps {
 export function FileUploadArea({ onFileSelect, acceptedFileTypes = ['image/*', 'video/*'] }: FileUploadAreaProps) {
   const [isDragging, setIsDragging] = useState(false);
   const { toast } = useToast();
-  const fileInputRef = useRef<HTMLInputElement>(null); // Added ref for file input
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileValidation = (file: File): boolean => {
+  const handleFileValidation = useCallback((file: File): boolean => {
     if (!acceptedFileTypes.some(type => {
       if (type.endsWith('/*')) {
         return file.type.startsWith(type.slice(0, -2));
@@ -31,7 +31,7 @@ export function FileUploadArea({ onFileSelect, acceptedFileTypes = ['image/*', '
       return false;
     }
     return true;
-  };
+  }, [acceptedFileTypes, toast]);
 
   const handleDragEnter = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -63,20 +63,24 @@ export function FileUploadArea({ onFileSelect, acceptedFileTypes = ['image/*', '
       }
       e.dataTransfer.clearData();
     }
-  }, [onFileSelect, acceptedFileTypes, toast]);
+  }, [onFileSelect, handleFileValidation]);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const file = e.target.files[0];
       if (handleFileValidation(file)) {
         onFileSelect(file);
       }
     }
-  };
+    // Reset the input value to allow selecting the same file again
+    if (e.target) {
+      e.target.value = ''; // or e.target.value = null;
+    }
+  }, [onFileSelect, handleFileValidation]);
 
-  const handleDivClick = () => {
-    fileInputRef.current?.click(); // Use ref to click the input
-  };
+  const handleDivClick = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []); // No dependencies as fileInputRef is stable
 
   return (
     <div
@@ -88,10 +92,15 @@ export function FileUploadArea({ onFileSelect, acceptedFileTypes = ['image/*', '
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
-      onClick={handleDivClick} // Updated onClick handler
+      onClick={handleDivClick}
       role="button"
       tabIndex={0}
       aria-label="File upload area"
+      onKeyDown={(e) => { // Allow keyboard activation
+        if (e.key === 'Enter' || e.key === ' ') {
+          handleDivClick();
+        }
+      }}
     >
       <UploadCloud className={cn("w-12 h-12 mb-3", isDragging ? "text-primary" : "text-muted-foreground")} />
       <p className={cn("mb-1 text-sm font-semibold", isDragging ? "text-primary" : "text-foreground")}>
@@ -99,12 +108,13 @@ export function FileUploadArea({ onFileSelect, acceptedFileTypes = ['image/*', '
       </p>
       <p className="text-xs text-muted-foreground">or click to select files</p>
       <input
-        ref={fileInputRef} // Attach the ref
-        id="fileInput" // ID can remain or be removed if not used elsewhere
+        ref={fileInputRef}
+        id="fileInput"
         type="file"
         className="hidden"
         onChange={handleFileChange}
         accept={acceptedFileTypes.join(',')}
+        aria-hidden="true" // Input is triggered by the div
       />
       <p className="mt-2 text-xs text-muted-foreground">Supports: Images & Videos</p>
     </div>
