@@ -38,12 +38,12 @@ export default function RootLayout({
         <meta name="msapplication-tap-highlight" content="no" />
         <meta name="theme-color" content="#8c9db3" />
 
-        <link rel="apple-touch-icon" href="https://placehold.co/180x180.png" data-ai-hint="logo app" />
+        <link rel="apple-touch-icon" href="https://placehold.co/180x180.png" data-ai-hint="app logo" />
         {/* You can add more apple-touch-icon sizes if needed */}
-        {/* 
-        <link rel="icon" type="image/png" sizes="32x32" href="https://placehold.co/32x32.png" data-ai-hint="favicon">
-        <link rel="icon" type="image/png" sizes="16x16" href="https://placehold.co/16x16.png" data-ai-hint="favicon">
-        */}
+        
+        <link rel="icon" type="image/png" sizes="32x32" href="https://placehold.co/32x32.png" data-ai-hint="app logo" />
+        <link rel="icon" type="image/png" sizes="16x16" href="https://placehold.co/16x16.png" data-ai-hint="app logo" />
+        
         <link rel="manifest" href="/manifest.json" />
         {/* <link rel="shortcut icon" href="/favicon.ico" /> */}
       </head>
