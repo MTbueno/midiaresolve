@@ -12,7 +12,7 @@ export function AppHeader() {
             <SlidersHorizontal className="h-6 w-6 text-primary" />
             <span className="font-bold text-lg tracking-tight">MidiaResolve</span>
           </Link>
-          <p className="text-xs text-muted-foreground mt-1">Design by Murillo Bueno</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Design by Murillo Bueno</p>
         </div>
       </div>
     </header>
