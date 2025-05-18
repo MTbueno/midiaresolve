@@ -10,7 +10,7 @@ export function AppHeader() {
         <div className="flex flex-col items-center">
           <Link href="/" className="flex items-center space-x-2">
             <SlidersHorizontal className="h-6 w-6 text-primary" />
-            <span className="font-bold text-lg tracking-tight">MidiaResolve</span>
+            <span className="font-bold text-xl tracking-tight">MidiaResolve</span>
           </Link>
           <p className="text-xs text-muted-foreground mt-0">Design by Murillo Bueno</p>
         </div>
