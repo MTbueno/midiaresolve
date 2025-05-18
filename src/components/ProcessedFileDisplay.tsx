@@ -14,6 +14,7 @@ export interface ProcessedResult {
   newSize: number;
   type: string;
   error?: string; // Optional error message
+  wasExifPreserved?: boolean; // Optional flag for EXIF status
 }
 
 interface ProcessedFileDisplayProps {
@@ -54,12 +55,14 @@ export function ProcessedFileDisplay({ processedFiles }: ProcessedFileDisplayPro
                                 {file.name}
                             </p>
                         </div>
-                         <Badge variant="secondary">Reduced by {compressionPercentage}%</Badge>
+                         <Badge variant="secondary" className="shrink-0">Reduced by {compressionPercentage}%</Badge>
                     </div>
                     <div className="flex justify-start items-center space-x-2 text-xs text-muted-foreground mt-1">
                       <span>{formatFileSize(file.originalSize)}</span>
                       <ArrowRight className="w-3 h-3" />
                       <span className="font-semibold text-primary">{formatFileSize(file.newSize)}</span>
+                       {file.wasExifPreserved === true && <Badge variant="outline" className="ml-auto text-xs">EXIF✓</Badge>}
+                       {file.wasExifPreserved === false && <Badge variant="outline" className="ml-auto text-xs text-muted-foreground">EXIF✗</Badge>}
                     </div>
                     <a
                       href={file.url}
@@ -82,7 +85,6 @@ export function ProcessedFileDisplay({ processedFiles }: ProcessedFileDisplayPro
           })}
         </ul>
       </ScrollArea>
-      {/* TODO: Add a "Download All as ZIP" button here later */}
     </div>
   );
 }

@@ -2,6 +2,7 @@
 "use client";
 import { useState, useEffect, useCallback } from 'react';
 import piexif from 'piexifjs';
+import JSZip from 'jszip';
 import { AppHeader } from '@/components/AppHeader';
 import { FileUploadArea } from '@/components/FileUploadArea';
 import { CompressionOptions, type CompressionLevel } from '@/components/CompressionOptions';
@@ -12,7 +13,10 @@ import { ImageAdvancedOptions } from '@/components/ImageAdvancedOptions';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { RefreshCcw } from 'lucide-react';
+import { RefreshCcw, DownloadCloud } from 'lucide-react';
+import { Progress } from "@/components/ui/progress";
+import { Label } from "@/components/ui/label";
+
 
 export interface OriginalDimensions {
   width: number;
@@ -37,6 +41,8 @@ export default function MidiaResolvePage() {
   const [outputWidth, setOutputWidth] = useState<string>('');
   const [outputHeight, setOutputHeight] = useState<string>('');
   const [isCropping, setIsCropping] = useState<boolean>(false);
+  const [overallProgress, setOverallProgress] = useState(0);
+
 
   useEffect(() => {
     return () => {
@@ -48,6 +54,7 @@ export default function MidiaResolvePage() {
 
   const handleFileSelect = useCallback(async (selectedFiles: FileList) => {
     setIsProcessing(true);
+    setOverallProgress(0);
     const newFilesToProcess: FileToProcess[] = [];
     for (let i = 0; i < selectedFiles.length; i++) {
       const file = selectedFiles[i];
@@ -62,20 +69,18 @@ export default function MidiaResolvePage() {
       let objectUrlForDimensions: string | null = null;
 
       try {
-        // Read EXIF data first
         const fileBuffer = await file.arrayBuffer();
-        // piexif expects a data URL string, not an ArrayBuffer directly.
-        const dataUrlForExif = `data:${file.type};base64,${Buffer.from(fileBuffer).toString('base64')}`;
+        const base64String = Buffer.from(fileBuffer).toString('base64'); // Node.js Buffer might be polyfilled by bundler
+        const dataUrlForExif = `data:${file.type};base64,${base64String}`;
+        
         try {
-           // Check if piexif can load it. This doesn't modify the file, just checks.
            piexif.load(dataUrlForExif); 
-           exifStr = dataUrlForExif; // Store the original dataURL containing EXIF if loadable
+           exifStr = dataUrlForExif; 
         } catch (exifError) {
           console.warn(`Could not load EXIF for ${file.name}:`, exifError);
-          exifStr = null; // Ensure exifData is null if it can't be loaded
+          exifStr = null; 
         }
         
-        // Get dimensions
         objectUrlForDimensions = URL.createObjectURL(file);
         dimensions = await new Promise((resolve, reject) => {
           const img = new Image();
@@ -89,15 +94,14 @@ export default function MidiaResolvePage() {
         toast({ title: "File Read Error", description: `Could not read metadata for "${file.name}". Error: ${error.message}`, variant: "destructive" });
       } finally {
         if (objectUrlForDimensions) {
-          URL.revokeObjectURL(objectUrlForDimensions); // Clean up object URL
+          URL.revokeObjectURL(objectUrlForDimensions); 
         }
       }
       newFilesToProcess.push({ id, originalFile: file, originalDimensions: dimensions, exifData: exifStr });
     }
     
     setFilesToProcess(current => [...current, ...newFilesToProcess]);
-    setProcessedResults([]); // Clear previous results when new files are added
-    // Reset advanced options for new batch
+    setProcessedResults([]); 
     setScalePercentage(100);
     setOutputWidth('');
     setOutputHeight('');
@@ -118,7 +122,6 @@ export default function MidiaResolvePage() {
       const originalAspectRatio = firstImageDims.width / firstImageDims.height;
       const targetAspectRatio = w / h;
 
-      // Use a small tolerance for floating point comparison
       setIsCropping(Math.abs(originalAspectRatio - targetAspectRatio) > 0.001);
     } else {
       setIsCropping(false);
@@ -128,11 +131,11 @@ export default function MidiaResolvePage() {
   const clearFiles = useCallback(() => {
     setFilesToProcess([]);
     setProcessedResults([]);
-    // Reset advanced options
     setScalePercentage(100);
     setOutputWidth('');
     setOutputHeight('');
     setIsCropping(false);
+    setOverallProgress(0);
   }, []);
 
   const handleCompress = async () => {
@@ -141,16 +144,18 @@ export default function MidiaResolvePage() {
       return;
     }
     setIsProcessing(true);
-    processedResults.forEach(r => { if (r.url) URL.revokeObjectURL(r.url); }); // Clean up previous results' object URLs
+    setOverallProgress(0);
+    processedResults.forEach(r => { if (r.url) URL.revokeObjectURL(r.url); }); 
     setProcessedResults([]);
     
     const newProcessedResults: ProcessedResult[] = [];
 
-    for (const fileToProcess of filesToProcess) {
+    for (let i = 0; i < filesToProcess.length; i++) {
+      const fileToProcess = filesToProcess[i];
       const { originalFile, originalDimensions, exifData, id } = fileToProcess;
       
-      // Simulate some delay for UI feedback per file
-      await new Promise(resolve => setTimeout(resolve, 200));
+      // Removed per-file timeout, progress bar will show updates
+      // await new Promise(resolve => setTimeout(resolve, 200));
 
       let newFileBlob: Blob = originalFile;
       let finalNewSize = originalFile.size;
@@ -174,7 +179,6 @@ export default function MidiaResolvePage() {
               let targetHeight = originalDimensions.height;
               let performCrop = false;
 
-              // Apply manual dimensions if set, otherwise apply scaling
               const manualW = parseInt(outputWidth);
               const manualH = parseInt(outputHeight);
 
@@ -183,7 +187,6 @@ export default function MidiaResolvePage() {
                 targetHeight = manualH;
                 const originalAspectRatio = originalDimensions.width / originalDimensions.height;
                 const manualAspectRatio = manualW / manualH;
-                // Check if aspect ratio changes, indicating a crop is needed
                 if (Math.abs(originalAspectRatio - manualAspectRatio) > 0.001) {
                   performCrop = true;
                 }
@@ -192,7 +195,6 @@ export default function MidiaResolvePage() {
                 targetHeight = Math.round(originalDimensions.height * (scalePercentage / 100));
               }
               
-              // Ensure dimensions are at least 1px
               targetWidth = Math.max(1, targetWidth);
               targetHeight = Math.max(1, targetHeight);
 
@@ -200,31 +202,26 @@ export default function MidiaResolvePage() {
               canvas.height = targetHeight;
 
               if (performCrop) {
-                // Center crop logic
                 const sourceAspectRatio = originalDimensions.width / originalDimensions.height;
                 const targetCanvasAspectRatio = targetWidth / targetHeight;
                 let sx = 0, sy = 0, sWidth = originalDimensions.width, sHeight = originalDimensions.height;
 
-                if (sourceAspectRatio > targetCanvasAspectRatio) { // Source is wider than target canvas
+                if (sourceAspectRatio > targetCanvasAspectRatio) { 
                   sWidth = originalDimensions.height * targetCanvasAspectRatio;
                   sx = (originalDimensions.width - sWidth) / 2;
-                } else if (sourceAspectRatio < targetCanvasAspectRatio) { // Source is taller than target canvas
+                } else if (sourceAspectRatio < targetCanvasAspectRatio) { 
                   sHeight = originalDimensions.width / targetCanvasAspectRatio;
                   sy = (originalDimensions.height - sHeight) / 2;
                 }
                 ctx.drawImage(img, sx, sy, sWidth, sHeight, 0, 0, targetWidth, targetHeight);
               } else {
-                // Simple resize, no crop
                 ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
               }
 
-              // Determine compression quality
-              let quality = 0.7; // medium default
+              let quality = 0.7; 
               if (compressionLevel === 'low') quality = 0.9;
               if (compressionLevel === 'high') quality = 0.5;
               
-              // Determine target MIME type. Prefer JPEG for compression and EXIF preservation.
-              // Preserve PNG only if low compression and no geometric changes.
               let targetMimeType = 'image/jpeg'; 
               if (currentFileType === 'image/png' && compressionLevel === 'low' && !performCrop && scalePercentage === 100 && !outputWidth && !outputHeight) {
                 targetMimeType = 'image/png';
@@ -232,11 +229,9 @@ export default function MidiaResolvePage() {
               
               let canvasDataUrl = canvas.toDataURL(targetMimeType, targetMimeType === 'image/jpeg' ? quality : undefined);
 
-              // Attempt to re-insert EXIF data if it's a JPEG and EXIF was present
               if (targetMimeType === 'image/jpeg' && exifData) {
                 try {
-                  const existingExif = piexif.load(exifData); // Load from original base64
-                  // Remove orientation tag to avoid auto-rotation by browsers after re-inserting
+                  const existingExif = piexif.load(exifData); 
                   delete existingExif['0th'][piexif.ImageIFD.Orientation];
                   delete existingExif['Exif'][piexif.ExifIFD.PixelXDimension];
                   delete existingExif['Exif'][piexif.ExifIFD.PixelYDimension];
@@ -245,23 +240,20 @@ export default function MidiaResolvePage() {
                   wasExifPreserved = true;
                 } catch (exifError) {
                   console.warn(`Failed to insert EXIF for ${originalFile.name}:`, exifError);
-                  // Continue without EXIF if insertion fails
                 }
               }
               
-              // Convert final dataURL to Blob
               const byteString = atob(canvasDataUrl.split(',')[1]);
               const finalMimeString = canvasDataUrl.split(',')[0].split(':')[1].split(';')[0];
               const ab = new ArrayBuffer(byteString.length);
               const ia = new Uint8Array(ab);
-              for (let i = 0; i < byteString.length; i++) {
-                ia[i] = byteString.charCodeAt(i);
+              for (let k = 0; k < byteString.length; k++) {
+                ia[k] = byteString.charCodeAt(k);
               }
               resolveBlob(new Blob([ab], { type: finalMimeString }));
             };
             img.onerror = (e) => rejectBlob(new Error(`Image loading failed for processing: ${e instanceof Event ? 'network error' : e.toString()}`));
             
-            // Use original file for image processing to ensure metadata is available if exifData was correctly read
             const reader = new FileReader();
             reader.onload = (event) => {
               if (!event.target?.result) {
@@ -271,16 +263,15 @@ export default function MidiaResolvePage() {
               img.src = event.target.result as string;
             };
             reader.onerror = (e) => rejectBlob(new Error(`FileReader failed for image processing.`));
-            reader.readAsDataURL(originalFile); // Read original file for canvas processing
+            reader.readAsDataURL(originalFile); 
           });
 
           finalNewSize = newFileBlob.size;
           
-          // Adjust filename if extension changes
           if (newFileBlob.type !== currentFileType || !processedFileName.endsWith(newFileBlob.type.split('/')[1])) {
               const dotIndex = originalFile.name.lastIndexOf('.');
               const baseName = dotIndex > -1 ? originalFile.name.substring(0, dotIndex) : originalFile.name;
-              const newExtension = newFileBlob.type.split('/')[1]; // e.g. jpeg, png
+              const newExtension = newFileBlob.type.split('/')[1]; 
               processedFileName = `compressed_${baseName}.${newExtension || 'bin'}`;
           }
 
@@ -289,14 +280,15 @@ export default function MidiaResolvePage() {
           newProcessedResults.push({
             id, name: originalFile.name, url: '', originalSize: originalFile.size, newSize: originalFile.size, type: originalFile.type, error: error.message || "Processing failed"
           });
-          continue; // Skip to next file
+          setOverallProgress(((i + 1) / filesToProcess.length) * 100);
+          continue; 
         }
       } else {
-         // This case should ideally not be hit if file filtering in handleFileSelect is robust
          newProcessedResults.push({
             id, name: originalFile.name, url: '', originalSize: originalFile.size, newSize: originalFile.size, type: originalFile.type, error: "Not an image or no dimensions"
           });
-        continue; // Skip to next file
+        setOverallProgress(((i + 1) / filesToProcess.length) * 100);
+        continue; 
       }
 
       const objectURL = URL.createObjectURL(newFileBlob);
@@ -307,28 +299,96 @@ export default function MidiaResolvePage() {
         originalSize: originalFile.size,
         newSize: finalNewSize,
         type: newFileBlob.type,
+        wasExifPreserved: newFileBlob.type === 'image/jpeg' && exifData ? wasExifPreserved : undefined,
       });
       
-      let toastMessage = `${processedFileName} ready.`;
-      if (wasExifPreserved) {
-        toastMessage += " EXIF preserved (JPEG)."
-      } else if (newFileBlob.type === 'image/jpeg' && exifData) {
-        // Only mention if EXIF was expected (original had it and output is JPEG) but not preserved
-        toastMessage += " EXIF not preserved."
-      }
+      setOverallProgress(((i + 1) / filesToProcess.length) * 100);
 
-
-      toast({ title: "Image Processed", description: toastMessage, duration: 2000 });
+      // Removed individual toast for batch processing
     }
 
     setProcessedResults(newProcessedResults);
     setIsProcessing(false);
-    if (newProcessedResults.some(r => !r.error)) {
-        toast({ title: "Batch Processing Complete!", description: `All images processed. Check results below.` });
-    } else if (newProcessedResults.length > 0) {
-        toast({ title: "Batch Processing Finished", description: `Some images could not be processed. See details below.`, variant: "destructive" });
+
+    const successfulCount = newProcessedResults.filter(r => !r.error).length;
+    const failedCount = newProcessedResults.length - successfulCount;
+
+    if (filesToProcess.length > 1) { // Batch processing
+        if (successfulCount === filesToProcess.length) {
+            toast({ title: "Batch Processing Complete!", description: `${successfulCount} images processed successfully.` });
+        } else if (successfulCount > 0) {
+            toast({ title: "Batch Processing Finished", description: `${successfulCount} images processed successfully, ${failedCount} failed. Check results below.`});
+        } else if (failedCount > 0) {
+             toast({ title: "Batch Processing Failed", description: `All ${failedCount} images could not be processed. See details below.`, variant: "destructive" });
+        }
+    } else if (newProcessedResults.length === 1) { // Single file processing
+        const result = newProcessedResults[0];
+        if (!result.error) {
+            let toastMessage = `${result.name} ready.`;
+            if (result.wasExifPreserved) {
+                toastMessage += " EXIF preserved (JPEG)."
+            } else if (result.type === 'image/jpeg' && filesToProcess[0].exifData) {
+                toastMessage += " EXIF not preserved."
+            }
+            toast({ title: "Image Processed", description: toastMessage });
+        } else {
+            toast({ title: "Processing Failed", description: result.error, variant: "destructive" });
+        }
     }
   };
+
+  const handleDownloadAll = async () => {
+    if (processedResults.length === 0) return;
+    const zip = new JSZip();
+    let filesAddedToZip = 0;
+
+    for (const result of processedResults) {
+      if (result.url && !result.error) {
+        try {
+          const response = await fetch(result.url);
+          const blob = await response.blob();
+          zip.file(result.name, blob);
+          filesAddedToZip++;
+        } catch (error) {
+          console.error(`Failed to fetch blob for ${result.name}:`, error);
+          toast({
+            title: "Download Error",
+            description: `Could not include ${result.name} in the ZIP.`,
+            variant: "destructive",
+          });
+        }
+      }
+    }
+
+    if (filesAddedToZip === 0) {
+        toast({
+            title: "No Files to Zip",
+            description: "No processed files were available to include in the ZIP.",
+            variant: "destructive",
+        });
+        return;
+    }
+
+    try {
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(zipBlob);
+      link.download = 'MidiaResolve_Processed_Images.zip';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href); // Clean up the blob URL
+      toast({ title: "Download Started", description: "Your ZIP file is being downloaded." });
+    } catch (error) {
+      console.error("Failed to generate ZIP:", error);
+      toast({
+        title: "ZIP Generation Error",
+        description: "Could not create the ZIP file.",
+        variant: "destructive",
+      });
+    }
+  };
+
 
   const handleReset = () => {
     clearFiles();
@@ -336,7 +396,6 @@ export default function MidiaResolvePage() {
     setCompressionLevel('medium');
   };
   
-  // Get dimensions of the first file for UI reference in ImageAdvancedOptions
   const firstOriginalDimensions = filesToProcess.length > 0 && filesToProcess[0].originalDimensions 
     ? filesToProcess[0].originalDimensions 
     : null;
@@ -363,7 +422,6 @@ export default function MidiaResolvePage() {
                 <FilePreview files={filesToProcess.map(f => f.originalFile)} onClear={clearFiles} />
                 <CompressionOptions value={compressionLevel} onChange={setCompressionLevel} />
                 
-                {/* Show advanced options only if there's at least one file and its dimensions are known */}
                 {firstOriginalDimensions && (
                   <ImageAdvancedOptions
                     scalePercentage={scalePercentage}
@@ -378,6 +436,14 @@ export default function MidiaResolvePage() {
                   />
                 )}
 
+                {isProcessing && filesToProcess.length > 1 && (
+                  <div className="w-full space-y-2 my-4">
+                    <Label htmlFor="batch-progress" className="text-sm font-medium text-center block">Processing Batch...</Label>
+                    <Progress id="batch-progress" value={overallProgress} className="w-full" />
+                    <p className="text-xs text-muted-foreground text-center">{Math.round(overallProgress)}% complete</p>
+                  </div>
+                )}
+
                 <Button onClick={handleCompress} disabled={isProcessing} className="w-full">
                   {isProcessing ? (
                     <LoadingSpinner className="mr-2" size={16} />
@@ -390,7 +456,12 @@ export default function MidiaResolvePage() {
             {processedResults.length > 0 && (
               <div className="text-center">
                 <ProcessedFileDisplay processedFiles={processedResults} />
-                <Button onClick={handleReset} variant="outline" className="w-full mt-4">
+                 {processedResults.length > 1 && processedResults.some(r => !r.error) && (
+                  <Button onClick={handleDownloadAll} variant="secondary" className="w-full mt-4">
+                    <DownloadCloud className="mr-2 h-4 w-4" /> Download All as ZIP
+                  </Button>
+                )}
+                <Button onClick={handleReset} variant="outline" className="w-full mt-2">
                   <RefreshCcw className="mr-2 h-4 w-4" /> Process More Images
                 </Button>
               </div>
